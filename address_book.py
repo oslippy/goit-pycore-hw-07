@@ -1,0 +1,148 @@
+import re
+from collections import UserDict
+from datetime import datetime, timedelta
+from typing import Any
+
+from exceptions import (
+    InvalidBirthdayError,
+    InvalidNameError,
+    InvalidPhoneError,
+    PhoneNotFoundError,
+    RecordNotFoundError,
+)
+
+
+class Field:
+    def __init__(self, value):
+        self.value = value
+
+    def __str__(self):
+        return str(self.value)
+
+
+class Name(Field):
+    def __init__(self, value):
+        if not value or not value.strip():
+            raise InvalidNameError("Name cannot be empty.")
+        super().__init__(value.strip())
+
+
+class Phone(Field):
+    def __init__(self, value):
+        normalized_phone = self._normalize_phone(value)
+        if not self._validate_phone(normalized_phone):
+            raise InvalidPhoneError(
+                "You have entered an invalid number. A Ukrainian mobile phone number starting with "
+                "+380 and containing 9 additional digits (e.g. +380981234567) is expected."
+                )
+        super().__init__(normalized_phone)
+    
+    @staticmethod
+    def _normalize_phone(phone_number: str) -> str:
+        clean_number = re.sub(r"[^\d]", "", phone_number)
+
+        if clean_number.startswith("0"):
+            clean_number = f"+38{clean_number}"
+        elif clean_number.startswith("8"):
+            clean_number = f"+3{clean_number}"
+        elif clean_number.startswith("3"):
+            clean_number = f"+{clean_number}"
+
+        return clean_number
+
+    @staticmethod
+    def _validate_phone(phone_number: str) -> bool:
+        pattern = re.compile(r"^\+380\d{9}$")
+        return bool(pattern.match(phone_number))
+
+
+class Birthday(Field):
+    def __init__(self, value):
+        try:
+            value = datetime.strptime(value.strip(), "%d.%m.%Y")
+            super().__init__(value)
+        except ValueError:
+            raise InvalidBirthdayError("Invalid date format. Use DD.MM.YYYY")
+
+
+class Record:
+    def __init__(self, name):
+        self.name = Name(name)
+        self.phones = []
+        self.birthday = None
+
+    def add_phone(self, phone: str) -> None:
+        phone_obj = Phone(phone)
+        self.phones.append(phone_obj)
+
+    def remove_phone(self, phone: str) -> None:
+        phone_to_remove = self.find_phone(phone)
+        self.phones.remove(phone_to_remove)
+
+    def edit_phone(self, old_phone: str, new_phone: str) -> None:
+        phone_to_edit = self.find_phone(old_phone)
+        idx = self.phones.index(phone_to_edit)
+        self.phones[idx] = Phone(new_phone)
+
+    def find_phone(self, phone: str) -> Phone:
+        for phone_obj in self.phones:
+            if phone_obj.value == phone:
+                return phone_obj
+        raise PhoneNotFoundError(f"Phone {phone} not found in record.")
+    
+    def add_birthday(self, birthday: str) -> None:
+        self.birthday = Birthday(birthday)
+
+    def __str__(self):
+        return f"Contact name: {self.name.value}, phones: {'; '.join(p.value for p in self.phones)}"
+
+
+class AddressBook(UserDict):
+    def add_record(self, record: Record) -> None:
+        self.data[record.name.value] = record
+
+    def find(self, name: str) -> Record:
+        return self.data.get(name)
+
+    def delete(self, name: str) -> None:
+        if name in self.data:
+            del self.data[name]
+        else:
+            raise RecordNotFoundError(f"Record with name '{name}' not found.")
+    
+    @property
+    def is_empty(self) -> bool:
+        return not bool(self.data)
+    
+    @property
+    def records(self) -> dict[str, Any]:
+        return self.data
+    
+    def get_upcoming_birthdays(self):
+        today_date = datetime.now().date()
+        congratulation_users = []
+
+        for record in self.data.values():
+            if record.birthday is not None:
+                if (
+                    record.birthday.value.month == today_date.month
+                    and today_date.day <= record.birthday.value.day
+                    and (record.birthday.value.day - today_date.day) <= 7
+                ):
+                    birthday_current_year = datetime(
+                        year=today_date.year, month=record.birthday.value.month, day=record.birthday.value.day
+                    )
+                    congratulation_date = None
+                    if birthday_current_year.weekday() in range(0, 5):
+                        congratulation_date = birthday_current_year
+                    elif birthday_current_year.weekday() == 5:
+                        congratulation_date = birthday_current_year + timedelta(days=2)
+                    else:
+                        congratulation_date = birthday_current_year + timedelta(days=1)
+                    congratulation_user = {
+                        "name": record.name.value,
+                        "congratulation_date": congratulation_date.strftime("%Y.%m.%d"),
+                    }
+                    congratulation_users.append(congratulation_user)
+
+        return congratulation_users
