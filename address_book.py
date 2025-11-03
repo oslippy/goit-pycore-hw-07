@@ -1,7 +1,7 @@
 import re
 from collections import UserDict
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Dict, List
 
 from exceptions import (
     InvalidBirthdayError,
@@ -29,30 +29,16 @@ class Name(Field):
 
 class Phone(Field):
     def __init__(self, value):
-        normalized_phone = self._normalize_phone(value)
-        if not self._validate_phone(normalized_phone):
+        if not self._validate_phone(value):
             raise InvalidPhoneError(
                 "You have entered an invalid number. A Ukrainian mobile phone number starting with "
-                "+380 and containing 9 additional digits (e.g. +380981234567) is expected."
-                )
-        super().__init__(normalized_phone)
-    
-    @staticmethod
-    def _normalize_phone(phone_number: str) -> str:
-        clean_number = re.sub(r"[^\d]", "", phone_number)
-
-        if clean_number.startswith("0"):
-            clean_number = f"+38{clean_number}"
-        elif clean_number.startswith("8"):
-            clean_number = f"+3{clean_number}"
-        elif clean_number.startswith("3"):
-            clean_number = f"+{clean_number}"
-
-        return clean_number
+                "0 and containing 9 additional digits (e.g. 0981234567) is expected."
+            )
+        super().__init__(value)
 
     @staticmethod
     def _validate_phone(phone_number: str) -> bool:
-        pattern = re.compile(r"^\+380\d{9}$")
+        pattern = re.compile(r"^0\d{9}$")
         return bool(pattern.match(phone_number))
 
 
@@ -63,6 +49,9 @@ class Birthday(Field):
             super().__init__(value)
         except ValueError:
             raise InvalidBirthdayError("Invalid date format. Use DD.MM.YYYY")
+
+    def __str__(self):
+        return self.value.strftime("%d.%m.%Y")
 
 
 class Record:
@@ -89,7 +78,7 @@ class Record:
             if phone_obj.value == phone:
                 return phone_obj
         raise PhoneNotFoundError(f"Phone {phone} not found in record.")
-    
+
     def add_birthday(self, birthday: str) -> None:
         self.birthday = Birthday(birthday)
 
@@ -109,16 +98,16 @@ class AddressBook(UserDict):
             del self.data[name]
         else:
             raise RecordNotFoundError(f"Record with name '{name}' not found.")
-    
+
     @property
     def is_empty(self) -> bool:
         return not bool(self.data)
-    
+
     @property
     def records(self) -> dict[str, Any]:
         return self.data
-    
-    def get_upcoming_birthdays(self):
+
+    def get_upcoming_birthdays(self) -> List[Dict[str, str]]:
         today_date = datetime.now().date()
         congratulation_users = []
 
@@ -130,7 +119,9 @@ class AddressBook(UserDict):
                     and (record.birthday.value.day - today_date.day) <= 7
                 ):
                     birthday_current_year = datetime(
-                        year=today_date.year, month=record.birthday.value.month, day=record.birthday.value.day
+                        year=today_date.year,
+                        month=record.birthday.value.month,
+                        day=record.birthday.value.day,
                     )
                     congratulation_date = None
                     if birthday_current_year.weekday() in range(0, 5):

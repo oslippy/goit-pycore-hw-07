@@ -1,9 +1,10 @@
 from enum import Enum
+from typing import List
 
 from colorama import Fore
 
 from address_book import AddressBook, Record
-from exceptions import AddressBookError, InvalidInputError, RecordNotFoundError, PhoneNotFoundError
+from exceptions import AddressBookError, InvalidInputError, RecordNotFoundError
 from utils import input_error
 
 
@@ -22,13 +23,32 @@ def add_contact(args: list[str], address_book: AddressBook) -> str:
 
 
 @input_error
-def change_contact(args: list[str], address_book: AddressBook) -> str:
-    name, phone_number = args
+def add_birthday(args: list[str], address_book: AddressBook) -> str:
+    name, birthday = args
     record = address_book.find(name)
     if record is None:
-            raise RecordNotFoundError(f"Contact '{name}' doesn't exist.")
-    old_phone_number = record.find_phone(phone_number)
-    record.edit_phone(old_phone_number.value, phone_number)
+        raise RecordNotFoundError(f"Contact '{name}' doesn't exist.")
+    message = "Birthday updated." if record.birthday is not None else "Birthday added."
+    record.add_birthday(birthday)
+    return message
+
+
+@input_error
+def show_birthday(args: list[str], address_book: AddressBook) -> str:
+    name = args[0]
+    record = address_book.find(name)
+    if record is None:
+        raise RecordNotFoundError(f"Contact '{name}' doesn't exist.")
+    return f"{Fore.LIGHTYELLOW_EX}{record.birthday}"
+
+
+@input_error
+def change_contact(args: list[str], address_book: AddressBook) -> str:
+    name, old_number, new_number = args
+    record = address_book.find(name)
+    if record is None:
+        raise RecordNotFoundError(f"Contact '{name}' doesn't exist.")
+    record.edit_phone(old_number, new_number)
     return "Contact changed."
 
 
@@ -38,9 +58,7 @@ def show_phone(args: list[str], address_book: AddressBook) -> str:
     record = address_book.find(name)
     if record is None:
         raise RecordNotFoundError(f"Contact '{name}' doesn't exist.")
-    if phone := record.find_phone(name):
-        return f"{Fore.LIGHTYELLOW_EX}{phone.value}"
-    raise PhoneNotFoundError("Contact not found.")
+    return f"{Fore.LIGHTYELLOW_EX}{[x.value for x in record.phones]}"
 
 
 @input_error
@@ -49,19 +67,38 @@ def show_all(_: list[str], address_book: AddressBook) -> str:
         raise AddressBookError("Address Book is empty...")
 
     output = f"{Fore.YELLOW}CONTACTS:\n"
-    for record in address_book.records:
-        output += f"{Fore.LIGHTYELLOW_EX}{record.name}: {Fore.LIGHTYELLOW_EX}{record.phones}\n"
+    for _, record in address_book.records.items():
+        output += f"{Fore.LIGHTYELLOW_EX}{record.name}: {Fore.LIGHTYELLOW_EX}{[x.value for x in record.phones]}\n"
+    return output.rstrip()
+
+
+@input_error
+def birthdays(_: list[str], address_book: AddressBook) -> str:
+    output = f"{Fore.YELLOW}UPCOMING BIRTHDAYS:\n"
+    for _, record in address_book.records.items():
+        output += f"{Fore.LIGHTYELLOW_EX}{record.name}: {Fore.LIGHTYELLOW_EX}{record.birthday}\n"
     return output.rstrip()
 
 
 class Command(Enum):
-    ADD = add_contact
-    CHANGE = change_contact
-    CLOSE = None
-    EXIT = None
-    HELLO = None
-    PHONE = show_phone
-    ALL = show_all
+    ADD = 0, add_contact
+    CHANGE = 1, change_contact
+    CLOSE = 2, None
+    EXIT = 3, None
+    HELLO = 4, None
+    PHONE = 5, show_phone
+    ALL = 6, show_all
+    ADD_BIRTHDAY = 7, add_birthday
+    SHOW_BIRTHDAY = 8, show_birthday
+    BIRTHDAYS = 9, birthdays
+
+    def __init__(self, order, func):
+        self.order = order
+        self.func = func
+
+    @classmethod
+    def available_commands(cls) -> List[str]:
+        return [x.name.replace("_", "-") for x in cls]
 
 
 @input_error
@@ -69,24 +106,39 @@ def parse_input(user_input: str):
     command, *args = user_input.strip().split()
     command = command.upper()
 
-    if command not in Command:
+    if command not in Command.available_commands():
         raise InvalidInputError(
-            f"Invalid command. Use one of commands: {', '.join([x.name.lower() for x in Command])}"
-            )
-
-    command = Command[command]
-
-    if command in (Command.ADD, Command.CHANGE) and len(args) != 2:
-        raise InvalidInputError(
-            f"Your input is incorrect. You forgot additional parameters. Use: {command} <name> <phone>"
+            f"Invalid command. Use one of commands: {', '.join(Command.available_commands())}"
         )
-    elif command == Command.PHONE and len(args) != 1:
-        raise InvalidInputError(
-            "Your input is incorrect. You forgot additional parameters. Use: phone <name>"
+
+    command = Command[command.replace("-", "_")]
+
+    if command in (Command.ADD, Command.ADD_BIRTHDAY) and len(args) != 2:
+        use_params = (
+            f"Use: {command.name} <name> <phone>"
+            if command.ADD
+            else f"Use: {command.name} <name> <birthday>"
         )
-    elif command == Command.ALL and len(args) != 0:
         raise InvalidInputError(
-            "Your input is incorrect. Command 'all' doesn't need additional parameters."
+            f"Your input is incorrect. You forgot additional parameters. {use_params}"
+        )
+    elif command == Command.CHANGE and len(args) != 3:
+        raise InvalidInputError(
+            f"Your input is incorrect. You forgot additional parameters. Use: {command.name} "
+            f"<name> <old_phone_number> <new_phone_number>"
+        )
+    elif command in (Command.PHONE, Command.SHOW_BIRTHDAY) and len(args) != 1:
+        use_params = (
+            f"Use: {command.name} <name>"
+            if command.PHONE
+            else f"Use: {command.name} <name>"
+        )
+        raise InvalidInputError(
+            f"Your input is incorrect. You forgot additional parameters. {use_params}"
+        )
+    elif command in (Command.ALL, Command.BIRTHDAYS) and len(args) != 0:
+        raise InvalidInputError(
+            f"Your input is incorrect. Commands '{Command.ALL}' and '{Command.BIRTHDAYS}' doesn't need additional parameters."
         )
 
     return command, args
@@ -98,7 +150,9 @@ def main():
     while True:
         input_command = input(f"{Fore.BLUE}Enter a command: ")
         if not input_command:
-            print(f"{Fore.RED}Use one of commands: {', '.join([x.name.lower() for x in Command])}")
+            print(
+                f"{Fore.RED}Use one of commands: {', '.join(Command.available_commands())}"
+            )
             continue
 
         parsed_input = parse_input(input_command)
@@ -112,7 +166,7 @@ def main():
         elif command == Command.HELLO:
             print(f"{Fore.GREEN}Hello! How can I help you?")
         else:
-            result = command.value(args, address_book=address_book)
+            result = command.func(args, address_book=address_book)
             if result is not None:
                 print(f"{Fore.GREEN}{result}")
 

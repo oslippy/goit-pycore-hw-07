@@ -1,3 +1,4 @@
+from colorama import Fore
 
 
 def input_error(func):
