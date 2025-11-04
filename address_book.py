@@ -31,14 +31,13 @@ class Phone(Field):
     def __init__(self, value):
         if not self._validate_phone(value):
             raise InvalidPhoneError(
-                "You have entered an invalid number. A Ukrainian mobile phone number starting with "
-                "0 and containing 9 additional digits (e.g. 0981234567) is expected."
+                "You have entered an invalid number. A phone number must contain 10 digits."
             )
         super().__init__(value)
 
     @staticmethod
     def _validate_phone(phone_number: str) -> bool:
-        pattern = re.compile(r"^0\d{9}$")
+        pattern = re.compile(r"^\d{10}$")
         return bool(pattern.match(phone_number))
 
 
