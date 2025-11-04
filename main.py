@@ -2,6 +2,7 @@ from enum import Enum
 from typing import List
 
 from colorama import Fore
+from prettytable import PrettyTable
 
 from address_book import AddressBook, Record
 from exceptions import AddressBookError, InvalidInputError, RecordNotFoundError
@@ -65,19 +66,32 @@ def show_phone(args: list[str], address_book: AddressBook) -> str:
 def show_all(_: list[str], address_book: AddressBook) -> str:
     if address_book.is_empty:
         raise AddressBookError("Address Book is empty...")
-
-    output = f"{Fore.YELLOW}CONTACTS:\n"
-    for _, record in address_book.records.items():
-        output += f"{Fore.LIGHTYELLOW_EX}{record.name}: {Fore.LIGHTYELLOW_EX}{[x.value for x in record.phones]}\n"
-    return output.rstrip()
+    table = PrettyTable(title="CONTACTS", field_names=["Name", "Phones", "Birthday"])
+    table.add_rows(
+        [
+            [
+                record.name,
+                [x.value for x in record.phones],
+                record.birthday.value.strftime("%d.%m.%Y") if record.birthday else None,
+            ]
+            for _, record in address_book.records.items()
+        ]
+    )
+    return f"{Fore.LIGHTYELLOW_EX}{table}"
 
 
 @input_error
 def birthdays(_: list[str], address_book: AddressBook) -> str:
-    output = f"{Fore.YELLOW}UPCOMING BIRTHDAYS:\n"
-    for _, record in address_book.records.items():
-        output += f"{Fore.LIGHTYELLOW_EX}{record.name}: {Fore.LIGHTYELLOW_EX}{record.birthday}\n"
-    return output.rstrip()
+    table = PrettyTable(
+        title="UPCOMING BIRTHDAYS", field_names=["Name", "Congratulation Date"]
+    )
+    table.add_rows(
+        [
+            [x["name"], x["congratulation_date"]]
+            for x in address_book.get_upcoming_birthdays()
+        ]
+    )
+    return f"{Fore.LIGHTYELLOW_EX}{table}"
 
 
 class Command(Enum):

@@ -131,7 +131,7 @@ class AddressBook(UserDict):
                         congratulation_date = birthday_current_year + timedelta(days=1)
                     congratulation_user = {
                         "name": record.name.value,
-                        "congratulation_date": congratulation_date.strftime("%Y.%m.%d"),
+                        "congratulation_date": congratulation_date.strftime("%d.%m.%Y"),
                     }
                     congratulation_users.append(congratulation_user)
 
